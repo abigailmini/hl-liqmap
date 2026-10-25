@@ -55,6 +55,7 @@ footer{font-size:11px;color:var(--mu);padding:0 10px 30px;max-width:1280px;margi
   <section class="p"><h2>Top clusters <span>capped $ (raw)</span></h2><div class="cl" id="clus"></div></section>
   <section class="p"><h2>24h history <span>log₂ L/S per band (capped) · price</span></h2><canvas id="hist"></canvas>
     <div class="leg" id="hleg"></div></section>
+  <section class="p" id="fwd"></section>
 </main>
 <footer id="foot"></footer>
 <script>
@@ -131,11 +132,23 @@ function render(){setBtns();tabs();const s=st.snap;if(!s)return;const d=s.coins[
  $("#ts").textContent=d?("snapshot "+new Date(d.ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+" · "+ago(age)+" ago · HL mark "+fp(d.mid)):"no data";
  const stale=!d||age>s.stale_after_s;const sb=$("#stale");sb.style.display=stale?"block":"none";
  sb.textContent=d?"⚠ STALE: last snapshot "+ago(age)+" ago (>"+Math.round(s.stale_after_s/60)+" min). Collector/publisher may be down.":"⚠ No snapshot yet for "+st.coin;
- if(!d)return;sig(d);ladder(d);bands(d);clus(d);histDraw();
+ if(!d)return;sig(d);ladder(d);bands(d);clus(d);histDraw();fwd();
  $("#foot").innerHTML="HL leaderboard sample: "+d.n_wallets+" wallets w/ "+st.coin+" pos · "+fm(d.sample_usd)+" notional = "+Math.round(d.hl_cov*100)+"% of HL OI (2-sided "+fm(2*d.hl_oi_usd)+") · no-liqPx "+fm(d.noliq_usd)+
  " · HL book stitched nSigFigs 5→2 (coarse beyond ~1%) · 1–5% L/S cap "+fr(d.ratio15_cap)+" / raw "+fr(d.ratio15_raw)+' · <a style="color:#5b8cff" href="data/snapshot.json">snapshot.json</a>'}
 async function load(){try{const r=await fetch("data/snapshot.json?t="+Date.now(),{cache:"no-store"});st.snap=await r.json();render()}catch(e){$("#ts").textContent="fetch failed: "+e}}
 async function loadHist(){try{const r=await fetch("data/history.json?t="+Date.now(),{cache:"no-store"});const h=await r.json();for(const c in h.coins)st.hist[c]=h.coins[c];histDraw()}catch(e){}}
+function fwd(){const f=st.fwd,el=$("#fwd");if(!f||!f.scans){el.innerHTML='<h2>Forward test <span class="badge">PAPER</span></h2><div class="m">no scans yet</div>';return}
+ const c=f.counts,ls=f.last_scan,pc=x=>x==null?"–":Math.round(x*100)+"%",fr2=x=>x==null?"–":(x>=0?"+":"")+x.toFixed(2);
+ const cell=a=>a&&a.n?'<b>'+pc(a.wr)+'</b><span class="sub">n'+a.n+' · '+fr2(a.avgR)+'R</span>':'<span class="m">–</span><span class="sub">'+(a?a.open:0)+' open</span>';
+ let h='<h2>Forward test <span class="badge">PAPER · 1 wk</span> <span>last scan '+new Date(ls.scan_ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+' · '+f.scans+' scans</span></h2>'+
+  '<div class="m">open '+c.open+' ('+c.pending+' pending entry) · closed '+c.closed+' · untriggered-expired '+c.untriggered+' · skips '+c.skip+' · rows '+c.rows+'</div>'+
+  '<div class="scroll"><table><tr><th>scenario</th><th>ALL</th><th>BTC</th><th>SOL</th><th>ETH</th><th>S</th><th>M</th><th>L</th></tr>';
+ for(const s of["MAGNET","FADE","CASCADE"]){const a=f.scenario[s]||{};h+='<tr><td>'+s+'</td>'+["ALL","BTC","SOL","ETH","S","M","L"].map(k=>'<td>'+cell(a[k])+'</td>').join("")+'</tr>'}
+ h+='</table></div>';const su=(f.setups||{})[st.coin]||[];
+ h+='<div class="m" style="margin-top:6px">'+st.coin+' setups from last scan (identical setups across threshold/filter variants merged; ×n = strategy rows)</div><div class="scroll"><table><tr><th>scn</th><th>band</th><th>dir</th><th>entry</th><th>TP</th><th>SL</th><th>R:R</th><th>ratio</th><th>status</th></tr>'+
+  (su.length?su.map(x=>'<tr><td>'+x.scenario.slice(0,3)+' ×'+x.n+'</td><td>'+x.band+'</td><td class="'+(x.dir=="LONG"?"g":"r")+'">'+x.dir+'</td><td>'+fp(x.entry)+'</td><td class="g">'+fp(x.tp)+'</td><td class="r">'+fp(x.sl)+'</td><td>'+(x.rr>=100?Math.round(x.rr):x.rr.toFixed(2))+'</td><td>'+fr(x.ratio)+'<span class="sub">'+x.nw+'w</span></td><td>'+x.status+(x.status=="open"&&x.scenario!="MAGNET"?(x.trig?" ✓trig":" ⏳"):"")+(x.r!=null?" "+fr2(x.r)+"R":"")+'</td></tr>').join(""):'<tr><td class="m" colspan=9>no live setups (all skipped)</td></tr>')+'</table></div>';
+ el.innerHTML=h}
+async function loadFwd(){try{const r=await fetch("data/forward.json?t="+Date.now(),{cache:"no-store"});st.fwd=await r.json();fwd()}catch(e){}}
 let rz;addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(render,150)});
-load();loadHist();setInterval(()=>{load();loadHist()},60000);setInterval(()=>{if(st.snap)render()},15000);
+load();loadHist();loadFwd();setInterval(()=>{load();loadHist();loadFwd()},60000);setInterval(()=>{if(st.snap)render()},15000);
 </script></body></html>

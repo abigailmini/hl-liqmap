@@ -52,7 +52,7 @@ Revert collector to the pure spike: copy `data/com.samantha.liqmap-spike.plist.o
 Manual run: `python3 collector.py --print` (prints bands/clusters/signal). Note: do not run while the launchd job is mid-run (HL rate limit).
 
 ## Files
-`collector.py` snapshot+store · `model.py` cap/bands/clusters/signal (pure) · `liqcore.py` fetchers (vendored spike) ·
+`collector.py` snapshot+store · `forward_test.py` paper forward test · `model.py` cap/bands/clusters/signal (pure) · `liqcore.py` fetchers (vendored spike) ·
 `server.py` HTTP/API · `static/index.html` dashboard (vanilla JS + canvas) · `backtest.py` go/no-go · `data/` DBs · `logs/`
 
 ## Go / no-go backtest (run after 3–5 days of logging, i.e. ≥ 2026-10-28)
@@ -70,3 +70,58 @@ long_cap/short_cap) is a deferred TODO — the dashboard signal uses capped valu
 - `collector.py` calls `publish.py` after each 5-min run: exports `data/snapshot.json` (latest, all coins) + `data/history.json` (rolling 24h, compact) into `./pages/` (gitignored checkout), amends the single gh-pages commit and force-pushes (timeout 60s, failures logged as `[warn] publish failed`, never fatal). gh-pages is always 1 commit → repo never grows.
 - Dashboard fetches `data/*.json?t=<ms>` (relative); local `server.py` serves the same paths. Stale banner if snapshot > 15 min old.
 - Expect ~1–3 min Pages propagation per update. Skip publishing: `collector.py --no-publish`.
+
+## Forward test (paper trades, 2026-10-25 → 2026-11-01)
+`forward_test.py` turns every scan into mechanical paper trades from a fixed strategy matrix, resolves them against the
+real HL price path, and reports which strategies have edge. Coins BTC, SOL, ETH. Gross R, no fees/slippage.
+
+| launchd label | what | schedule | log |
+|---|---|---|---|
+| `com.samantha.hl-forward-scan` | `forward_test.py cron-scan` = scan + resolve + daily + json | 08:00, 12:00, 16:00, 21:00 KL | `logs/forward.log` |
+| `com.samantha.hl-forward-resolve` | `forward_test.py cron-resolve` = resolve + daily + json | hourly at :30 | `logs/forward.log` |
+
+Scan reads the latest collector snapshot from local sqlite (no HL calls; skips with reason if snapshot >20 min old).
+Resolve makes 1 HL `candleSnapshot` (1m) call per coin per run, incremental, cached in the `candles` table → no collision
+with the collector's rate budget. Scans stop after Nov 1 (WINDOW_END); resolve keeps closing trades (L trades live 72h).
+
+Files: `data/forward_test.sqlite` (tables `trades`, `scans`, `candles`) · `data/forward_report.md` (report) ·
+`data/forward_daily_YYYY-MM-DD.md` (1–3 line daily summary, rewritten every scan/resolve — Abi's cron reads it) ·
+`data/forward.json` (dashboard; also exported to Pages by publish.py) · dashboard section "Forward test" (bottom).
+
+    python3 forward_test.py scan [--coins BTC,SOL] [--force]   # manual scan (1 per KL hour slot; --force adds missing rows)
+    python3 forward_test.py resolve
+    python3 forward_test.py report [--min-n 5]                 # -> data/forward_report.md
+    python3 forward_test.py show [--scan "2026-10-25 16"]       # counts + live rows of a scan
+    python3 forward_test.py daily
+
+### Strategy matrix (108 rows / coin / scan, every row logged: status open | skip + skip_reason)
+`strategy_id = SCN-BAND-rTHR-wW-rrX`, e.g. `MAG-M-r2.0-w3-rr1.0`
+- **scenario**: MAGNET / FADE / CASCADE. **band** (where clusters are searched + expiry): S 0–1% (8h), M 1–5% (24h), L 5–10% (72h).
+- **ratio_thr** 1.5 / 2.0 / 3.0 on capped dominant/other liq $ inside the band (other side 0 → ∞).
+- **wallet** w3 (≥3 distinct wallets on dominant side in band) / w0 (no filter — added for all bands, not only S, because
+  SOL rarely has ≥3 wallets per band and w0 is needed to get ≥10 live trades/coin). **rr** rr0 / rr1 (skip if R:R < 1.0).
+- Dominant side = side of the band with more capped liq $ (long-liq below ⇒ down-magnet ⇒ SHORT).
+- **MAGNET**: market @ mark toward dominant side. TP = largest dominant bucket in band. SL = 0.1% past nearest opposite
+  obstacle (liq bucket ≥25% of opposite max, or HL book wall ≥3× median 0.5–5%) within S 1% / M,L 5%; fallback 0.5/1.5/3%.
+- **FADE** (conditional limit): entry @ nearest big dominant-side level in band (liq bucket ≥25% of band max, or book wall),
+  direction AGAINST the magnet. TP = 50% retrace to the scan mark. SL = 0.1% past the level's far bucket edge.
+- **CASCADE** (conditional stop-entry): entry @ nearest big dominant-side liq bucket, WITH the magnet. TP = next liq bucket
+  further out same side (≥25% of trigger $, ≤10%). SL = 0.1% back through the trigger bucket's near edge.
+- Thresholds/filters are nested, so many rows share one setup — the report compares variants; the dashboard merges them.
+
+### Resolution rules
+1m candles with open ≥ scan time, until expiry. First touch; TP and SL in same candle → SL. Conditional entries: the trigger
+candle never counts TP; it counts SL if SL lies beyond the entry along the approach (FADE, candle extreme) else only if the
+candle *closes* past SL (CASCADE — the high/low before the trigger is ambiguous). Expiry: triggered → `expired`, exit at last
+close, R = signed move/risk; never triggered → `expired_untriggered` (excluded from win%, shown as fill rate).
+Win = +R:R, loss = −1R. Report: n, win%, Wilson 95% CI, exp R (mean R), ΣR, max DD (R, by exit time), median time-to-exit,
+fill, plus marginals per scenario/band/threshold/wallet/rr/coin and top/bottom-5 strategy_id (n≥5).
+
+### Extending strategies
+1. Add a scenario: new key in `SCEN` (3-letter code) and a branch in `build(scn, band, ctx, mid)` returning
+   `{direction, entry, tp, sl, cluster_usd, cluster_px, conditional, notes}` (or `{"skip": reason}`). `ctx` has the
+   band's dominant side/map, all capped liq buckets (`lc`, `sc`) and book (`bid`, `ask`), keyed by 0.25% bucket lower edge.
+   `conditional=1` makes the resolver wait for entry touch.
+2. Add a dimension value: extend `BANDS` / `THRS` / `WALLETS` / `RRF` (strategy_id is generated from them). New ids start
+   accumulating from the next scan; old rows are untouched (UNIQUE(scan_id, coin, strategy_id)).
+3. Don't change the meaning of an existing id mid-test — add a new id instead, or the stats mix two rules.

@@ -5,6 +5,7 @@
   GET /api/history?coin=BTC&hours=24   per-snapshot mid + band ratios (capped & raw)
   GET /api/health            last run info
   GET /data/snapshot.json, /data/history.json   same shape as the GitHub Pages static files
+  GET /data/forward.json (= /api/forward)       forward-test summary (data/forward.json from forward_test.py)
 """
 import json, os, sqlite3, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -73,6 +74,10 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/data/history.json":
                 import publish
                 return self.send(200, publish.history_all())
+            if u.path in ("/data/forward.json", "/api/forward"):  # forward-test summary (written by forward_test.py)
+                p = os.path.join(HERE, "data", "forward.json")
+                if not os.path.exists(p): return self.send(200, {"scans": 0, "counts": {}, "scenario": {}, "setups": {}})
+                return self.send(200, open(p, "rb").read())
             if u.path == "/api/snapshot":
                 c = qs.get("coin", [None])[0]
                 return self.send(200, snapshot([c.upper()] if c else COINS))

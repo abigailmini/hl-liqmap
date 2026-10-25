@@ -37,6 +37,12 @@ def export(dst):
         tmp = os.path.join(dst, "data", name + ".tmp")
         with open(tmp, "w") as f: json.dump(obj, f, separators=(",", ":"))
         os.replace(tmp, os.path.join(dst, "data", name))
+    try:  # forward-test summary (refreshed here so Pages shows current open/closed counts)
+        import forward_test
+        forward_test.write_json()
+        shutil.copyfile(os.path.join(HERE, "data", "forward.json"), os.path.join(dst, "data", "forward.json"))
+    except Exception as e:
+        print(f"[warn] forward.json export failed: {e}", file=sys.stderr)
     shutil.copyfile(os.path.join(HERE, "static", "index.html"), os.path.join(dst, "index.html"))
     open(os.path.join(dst, ".nojekyll"), "w").close()
     return snap
