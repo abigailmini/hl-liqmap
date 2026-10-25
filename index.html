@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10"><title>HL Liq-Map</title>
+<style>
+:root{--bg:#0b0d10;--pn:#12161b;--ln:#1f262e;--tx:#d7dde4;--mu:#7b8794;--red:#ef4b5c;--grn:#2fc58a;--blu:#5b8cff;--amb:#f0b429;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.35 -apple-system,system-ui,sans-serif}
+.num,td,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--ln);padding:8px 10px calc(6px);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+h1{font-size:13px;margin:0;letter-spacing:.06em;color:var(--mu);font-weight:600}
+.tabs{display:flex;gap:4px}.tab{border:1px solid var(--ln);background:var(--pn);color:var(--tx);border-radius:6px;padding:5px 9px;font:600 12px var(--mono);cursor:pointer}
+.tab[aria-pressed=true]{border-color:var(--blu);background:#18233a}
+.tab small{font-weight:400;color:var(--mu);margin-left:4px}
+.tab .S{color:var(--red)}.tab .L{color:var(--grn)}
+.tog{margin-left:auto;display:flex;gap:4px}.tog button{border:1px solid var(--ln);background:transparent;color:var(--mu);border-radius:5px;padding:4px 7px;font:11px var(--mono);cursor:pointer}
+.tog button[aria-pressed=true]{color:var(--tx);border-color:#3a4552}
+#ts{font:11px var(--mono);color:var(--mu);width:100%}
+#stale{display:none;background:#3a1416;color:#ffb3ba;border:1px solid #6b2229;padding:6px 10px;margin:8px 10px 0;border-radius:6px;font-size:12px}
+main{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:8px 10px 24px;max-width:1280px;margin:0 auto}
+@media(min-width:900px){main{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}#ladderP{grid-row:span 3}}
+.p{background:var(--pn);border:1px solid var(--ln);border-radius:8px;padding:8px 10px;min-width:0}
+.p h2{font-size:11px;margin:0 0 6px;color:var(--mu);font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;gap:8px}
+.p h2 span{text-transform:none;letter-spacing:0;font-weight:400}
+table{width:100%;border-collapse:collapse;font-size:12px}th{font:600 10px -apple-system,system-ui;color:var(--mu);text-align:right;padding:3px 4px;border-bottom:1px solid var(--ln)}
+th:first-child,td:first-child{text-align:left}td{text-align:right;padding:4px;border-bottom:1px solid #171c22;white-space:nowrap}
+td .sub{display:block;font-size:10px;color:var(--mu)}
+.r{color:var(--red)}.g{color:var(--grn)}.m{color:var(--mu)}.a{color:var(--amb)}
+canvas{display:block;width:100%}
+#sig .badge,#swp .badge{display:inline-block;font:600 10px var(--mono);padding:2px 6px;border-radius:4px;background:#3a2d0b;color:var(--amb);letter-spacing:.05em}
+#sig .big{font:700 20px var(--mono);margin:6px 0 2px}
+#sig .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:6px}
+#sig .grid div{background:#0e1216;border:1px solid var(--ln);border-radius:6px;padding:5px 6px}
+#sig .grid b{display:block;font:600 13px var(--mono)}#sig .grid i{font-style:normal;font-size:10px;color:var(--mu)}
+.cl{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.leg{font-size:10px;color:var(--mu);margin-top:4px}.leg i{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin:0 3px 0 8px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:600px){main{padding:6px 6px 20px;gap:6px}.p{padding:7px 7px}table{font-size:11px}td,th{padding:3px 3px}td .sub{font-size:9px}
+ #sig .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cl{grid-template-columns:1fr;gap:6px}header{padding:6px}.tab{padding:4px 7px}.tog{margin-left:0}}
+footer{font-size:11px;color:var(--mu);padding:0 10px 30px;max-width:1280px;margin:0 auto}
+</style></head><body>
+<header>
+  <h1>HL LIQ-MAP</h1>
+  <div class="tabs" id="tabs"></div>
+  <div class="tog"><button id="bCap" aria-pressed="true">capped</button><button id="bRaw" aria-pressed="false">raw</button>
+  <button id="bR5" aria-pressed="false">±5%</button><button id="bR10" aria-pressed="true">±10%</button></div>
+  <div id="ts">loading…</div>
+</header>
+<div id="stale"></div>
+<main>
+  <section class="p" id="sig"></section>
+  <section class="p" id="ladderP"><h2>Heat ladder <span id="ladMeta"></span></h2><canvas id="lad"></canvas>
+    <div class="leg"><i style="background:var(--red)"></i>long-liq (below)<i style="background:var(--grn)"></i>short-liq (above)<i style="background:var(--blu)"></i>HL book depth<i style="background:transparent;border:1px solid #58616b"></i>raw (uncapped)</div></section>
+  <section class="p"><h2>Bands <span id="bandMeta"></span></h2><div class="scroll"><table id="bandT"></table></div></section>
+  <section class="p"><h2>Top clusters <span>capped $ (raw)</span></h2><div class="cl" id="clus"></div></section>
+  <section class="p"><h2>24h history <span>log₂ L/S per band (capped) · price</span></h2><canvas id="hist"></canvas>
+    <div class="leg" id="hleg"></div></section>
+  <section class="p" id="swp"></section>
+  <section class="p" id="fwd"></section>
+</main>
+<footer id="foot"></footer>
+<script>
+const COINS=["BTC","ETH","SOL"],BANDC={S:"#9aa5b1","M-":"#f0b429",M:"#ef4b5c",L:"#5b8cff"},STEP=.25;
+const st={coin:(location.hash.slice(1)||localStorage.coin||"BTC").toUpperCase(),mode:localStorage.mode||"cap",R:+(localStorage.R||10),snap:null,hist:{}};
+if(!COINS.includes(st.coin))st.coin="BTC";
+const $=s=>document.querySelector(s);
+const fm=x=>x==null?"–":x>=1e9?(x/1e9).toFixed(2)+"B":x>=1e6?(x/1e6).toFixed(1)+"M":x>=1e3?(x/1e3).toFixed(0)+"k":x>0?x.toFixed(0):"0";
+const fr=r=>r==null?"n/a":r>=999?"∞":r>=10?r.toFixed(0):r.toFixed(2);
+const rc=r=>r==null?"m":r>=2?"r":r<=.5?"g":"";
+const fp=(p,c)=>{if(p==null)return"–";const d=p>=1000?0:p>=100?1:p>=10?2:3;return p.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})};
+const ago=s=>s<90?s+"s":s<5400?Math.round(s/60)+"m":(s/3600).toFixed(1)+"h";
+function setBtns(){$("#bCap").ariaPressed=st.mode=="cap";$("#bRaw").ariaPressed=st.mode=="raw";$("#bR5").ariaPressed=st.R==5;$("#bR10").ariaPressed=st.R==10}
+$("#bCap").onclick=()=>{st.mode="cap";localStorage.mode="cap";render()};$("#bRaw").onclick=()=>{st.mode="raw";localStorage.mode="raw";render()};
+$("#bR5").onclick=()=>{st.R=5;localStorage.R=5;render()};$("#bR10").onclick=()=>{st.R=10;localStorage.R=10;render()};
+function tabs(){const s=st.snap;$("#tabs").innerHTML=COINS.map(c=>{const d=s&&s.coins[c];let t="";
+ if(d){const g=d.signal;t=g.active?'<small class="'+(g.bias=="SHORT"?"S":"L")+'">'+(g.bias=="SHORT"?"▼":"▲")+fr(g.dom_ratio)+'</small>':'<small>'+fr(g.dom_ratio??g.ratio15)+'</small>'}
+ return '<button class="tab" aria-pressed="'+(c==st.coin)+'" data-c="'+c+'">'+c+t+'</button>'}).join("");
+ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{st.coin=b.dataset.c;localStorage.coin=st.coin;history.replaceState(null,"","#"+st.coin);render();loadHist()})}
+function canv(el,h){const dpr=devicePixelRatio||1,w=el.clientWidth||el.parentNode.clientWidth;el.width=w*dpr;el.height=h*dpr;el.style.height=h+"px";const x=el.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);return[x,w,h]}
+function ladder(d){
+ const B=d.buckets||{},R=st.R,n=Math.round(2*R/STEP),rh=Math.max(5,Math.min(9,Math.floor(560/n)))+(R==5?2:0),H=n*rh+14;
+ const[x,W]=canv($("#lad"),H);const L0=62,LW=W-L0-50;
+ const kL=st.mode=="cap"?"long_cap":"long_raw",kS=st.mode=="cap"?"short_cap":"short_raw";
+ const val=(m,k)=>(B[m]||{})[k.toFixed(2)]||0;
+ let mx=1,mb=1;for(let i=0;i<n;i++){const k=R-STEP*(i+1);mx=Math.max(mx,val(kL,k),val(kS,k));mb=Math.max(mb,val("bid",k),val("ask",k))}
+ x.font="10px "+getComputedStyle(document.body).getPropertyValue("--mono");x.textBaseline="middle";
+ for(let i=0;i<n;i++){const k=+(R-STEP*(i+1)).toFixed(2),y=7+i*rh,below=k<0;
+  if(Math.round((k+STEP)/STEP)%4==0){x.fillStyle="#1a2027";x.fillRect(L0,y,LW,1);const pc=k+STEP;
+   x.fillStyle="#7b8794";x.textAlign="right";x.fillText(fp(d.mid*(1+pc/100)),L0-6,y);x.textAlign="left";x.fillText((pc>0?"+":"")+pc+"%",W-44,y)}
+  const v=below?val(kL,k):val(kS,k),raw=below?val("long_raw",k):val("short_raw",k);
+  if(st.mode=="cap"&&raw>v){x.strokeStyle="#58616b";x.lineWidth=1;const rw=Math.min(LW,raw/mx*LW);x.strokeRect(L0+.5,y+.5,Math.max(1,rw-1),rh-2)}
+  if(v>0){x.fillStyle=below?"#ef4b5c":"#2fc58a";x.globalAlpha=.35+.65*Math.min(1,v/mx);x.fillRect(L0,y,Math.max(1,v/mx*LW),rh-1);x.globalAlpha=1}
+  const bk=below?val("bid",k):val("ask",k);if(bk>0){x.fillStyle="rgba(91,140,255,.6)";x.fillRect(L0,y+rh/2-1,Math.max(1,bk/mb*LW),2)}
+  if(v>=mx*.3){x.fillStyle="#d7dde4";x.textAlign="left";const tx=L0+Math.min(LW-40,v/mx*LW+4);x.fillText(fm(v),tx,y+rh/2)}}
+ const yz=7+(R/STEP)*rh;x.fillStyle="#f0b429";x.fillRect(0,yz-1,W,2);x.textAlign="left";x.fillStyle="#0b0d10";x.fillRect(0,yz-7,L0-4,14);x.fillStyle="#f0b429";x.fillText(fp(d.mid),2,yz);
+ const g=d.signal;if(g.active){for(const[p,c,t]of[[g.tp,"#2fc58a","TP"],[g.sl,"#ef4b5c","SL"]]){const pc=(p/d.mid-1)*100;if(Math.abs(pc)>R)continue;const yy=7+(R-pc)/STEP*rh;
+  x.setLineDash([4,3]);x.strokeStyle=c;x.beginPath();x.moveTo(L0,yy);x.lineTo(W-48,yy);x.stroke();x.setLineDash([]);x.fillStyle=c;x.fillText(t,W-44,yy+(t=="TP"?-6:6))}}
+ $("#ladMeta").textContent=(st.mode=="cap"?"capped ":"raw ")+"· max bucket "+fm(mx)+" · book max "+fm(mb)}
+function bands(d){const c=st.mode=="cap";let h='<tr><th>Band</th><th>Long-liq $</th><th>Short-liq $</th><th>L/S</th><th>Bid $</th><th>Ask $</th></tr>';
+ for(const b of d.bands){const l=c?b.long_cap:b.long_raw,s=c?b.short_cap:b.short_raw,r=c?b.ratio_cap:b.ratio_raw,ro=c?b.ratio_raw:b.ratio_cap;
+  h+='<tr'+(b.thin?' style="opacity:.55" title="thin: <6 wallets"':'')+'><td>'+b.label+(b.thin?'<span class="sub">thin</span>':'')+'</td><td class="r">'+fm(l)+'<span class="sub">'+(c?"raw "+fm(b.long_raw):"")+' · '+b.n_long+'w'+(b.top_long_share>.3?' <span class="a">top '+Math.round(b.top_long_share*100)+'%</span>':'')+'</span></td>'+
+  '<td class="g">'+fm(s)+'<span class="sub">'+(c?"raw "+fm(b.short_raw):"")+' · '+b.n_short+'w'+(b.top_short_share>.3?' <span class="a">top '+Math.round(b.top_short_share*100)+'%</span>':'')+'</span></td>'+
+  '<td class="'+rc(r)+'">'+fr(r)+'<span class="sub">'+(c?"raw ":"cap ")+fr(ro)+'</span></td><td>'+fm(b.bid)+'</td><td>'+fm(b.ask)+'</td></tr>'}
+ $("#bandT").innerHTML=h;$("#bandMeta").textContent=(c?"capped ≤"+Math.round(d.cap*100)+"%/wallet/band":"raw")+" · L/S≥2 red (down-magnet), ≤0.5 green"}
+function clus(d){const one=(side,t,cl)=>'<div><table><tr><th>'+t+'</th><th>$</th><th>dist</th></tr>'+(d.clusters[side].length?d.clusters[side].map(c=>
+ '<tr><td class="'+cl+'">'+fp(c.px)+'</td><td>'+fm(c.usd_cap)+(c.usd_raw>c.usd_cap*1.05?'<span class="sub">raw '+fm(c.usd_raw)+'</span>':'')+'</td><td>'+(c.dist_pct>0?"+":"")+c.dist_pct.toFixed(2)+'%</td></tr>').join(""):'<tr><td class="m" colspan=3>none ≤10%</td></tr>')+'</table></div>';
+ $("#clus").innerHTML=one("short","Short-liq ▲","g")+one("long","Long-liq ▼","r")}
+function sig(d){const g=d.signal;let h='<h2>Signal <span class="badge">EXPERIMENTAL · not backtested</span></h2>';
+ if(!g.active){h+='<div class="big m">NO SIGNAL</div><div class="m">'+(g.reason||"")+' · 1–5% long-liq '+fm(g.long15)+' vs short-liq '+fm(g.short15)+' (need ≥'+g.threshold+'×)</div>'}
+ else{const s=g.bias=="SHORT";h+='<div class="big '+(s?"r":"g")+'">'+(s?"▼ SHORT bias":"▲ LONG bias")+' <span class="m" style="font-size:13px">'+fr(g.dom_ratio)+'× · tier '+g.tier+'</span></div>'+
+  '<div class="m">'+(s?"long-liq below":"short-liq above")+' dominates 1–5% ('+fm(g.long15)+' L vs '+fm(g.short15)+' S, capped, '+g.dom_wallets+' wallets)</div>'+
+  '<div class="grid"><div><i>entry ~</i><b>'+fp(d.mid)+'</b></div><div><i>TP '+g.tp_dist_pct.toFixed(2)+'%</i><b class="g">'+fp(g.tp)+'</b><i>'+fm(g.tp_usd)+' cluster</i></div>'+
+  '<div><i>SL '+g.sl_dist_pct.toFixed(2)+'%</i><b class="r">'+fp(g.sl)+'</b><i>'+g.sl_note+'</i></div><div><i>R:R</i><b class="'+(g.rr>=1.5?"g":g.rr<1?"r":"")+'">'+(g.rr??"–")+'</b><i>tier '+g.tier+' (TP band)</i></div></div>'}
+ $("#sig").innerHTML=h}
+function histDraw(){const hd=st.hist[st.coin],[x,W,H]=canv($("#hist"),190);const p=(hd&&hd.points)||[];
+ x.font="10px ui-monospace,Menlo,monospace";x.fillStyle="#7b8794";
+ if(p.length<2){x.fillText(p.length?"1 snapshot so far — history builds every 5 min":"no history yet",8,20);$("#hleg").innerHTML="";return}
+ const t0=p[0].ts,t1=p[p.length-1].ts,X=t=>40+(t-t0)/Math.max(1,t1-t0)*(W-48);
+ const ph=70,mids=p.map(q=>q.mid),lo=Math.min(...mids),hi=Math.max(...mids),Yp=v=>6+(hi-v)/Math.max(1e-9,hi-lo)*(ph-12);
+ x.strokeStyle="#d7dde4";x.lineWidth=1.2;x.beginPath();p.forEach((q,i)=>i?x.lineTo(X(q.ts),Yp(q.mid)):x.moveTo(X(q.ts),Yp(q.mid)));x.stroke();
+ x.fillText(fp(hi),2,8);x.fillText(fp(lo),2,ph-4);
+ for(const q of p)if(q.sig){x.fillStyle=q.sig=="SHORT"?"#ef4b5c":"#2fc58a";x.fillRect(X(q.ts)-1,ph-2,2,4)}
+ const r0=ph+10,rh=H-r0-14,Yr=v=>r0+(4-Math.max(-4,Math.min(4,v)))/8*rh;
+ x.strokeStyle="#262e37";x.setLineDash([3,3]);for(const v of[1,-1]){x.beginPath();x.moveTo(40,Yr(v));x.lineTo(W,Yr(v));x.stroke()}x.setLineDash([]);
+ x.strokeStyle="#39434e";x.beginPath();x.moveTo(40,Yr(0));x.lineTo(W,Yr(0));x.stroke();
+ x.fillStyle="#7b8794";x.fillText("L/S 16×",0,Yr(4)+4);x.fillText("2×",14,Yr(1)+3);x.fillText("½×",14,Yr(-1)+3);x.fillText("1/16",4,Yr(-4)-2);
+ for(const b of["S","M-","M","L"]){x.strokeStyle=BANDC[b];x.lineWidth=1.3;x.beginPath();let on=false;
+  for(const q of p){const r=q.cap[b];if(r==null||r<=0){on=false;continue}const y=Yr(Math.log2(Math.min(r,999)));on?x.lineTo(X(q.ts),y):x.moveTo(X(q.ts),y);on=true}x.stroke()}
+ const tf=t=>new Date(t*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});x.fillStyle="#7b8794";x.fillText(tf(t0),40,H-2);x.textAlign="right";x.fillText(tf(t1),W-2,H-2);x.textAlign="left";
+ $("#hleg").innerHTML=Object.entries(BANDC).map(([b,c])=>'<i style="background:'+c+'"></i>'+b).join("")+' <span style="margin-left:8px">'+p.length+' pts · ticks = signal on</span>'}
+function render(){setBtns();tabs();const s=st.snap;if(!s)return;const d=s.coins[st.coin];
+ const now=Date.now()/1000,age=d?Math.round(now-d.ts):null;
+ $("#ts").textContent=d?("snapshot "+new Date(d.ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+" · "+ago(age)+" ago · HL mark "+fp(d.mid)):"no data";
+ const stale=!d||age>s.stale_after_s;const sb=$("#stale");sb.style.display=stale?"block":"none";
+ sb.textContent=d?"⚠ STALE: last snapshot "+ago(age)+" ago (>"+Math.round(s.stale_after_s/60)+" min). Collector/publisher may be down.":"⚠ No snapshot yet for "+st.coin;
+ if(!d)return;sig(d);ladder(d);bands(d);clus(d);histDraw();fwd();swp();
+ $("#foot").innerHTML="HL leaderboard sample: "+d.n_wallets+" wallets w/ "+st.coin+" pos · "+fm(d.sample_usd)+" notional = "+Math.round(d.hl_cov*100)+"% of HL OI (2-sided "+fm(2*d.hl_oi_usd)+") · no-liqPx "+fm(d.noliq_usd)+
+ " · HL book stitched nSigFigs 5→2 (coarse beyond ~1%) · 1–5% L/S cap "+fr(d.ratio15_cap)+" / raw "+fr(d.ratio15_raw)+' · <a style="color:#5b8cff" href="data/snapshot.json">snapshot.json</a>'}
+async function load(){try{const r=await fetch("data/snapshot.json?t="+Date.now(),{cache:"no-store"});st.snap=await r.json();render()}catch(e){$("#ts").textContent="fetch failed: "+e}}
+async function loadHist(){try{const r=await fetch("data/history.json?t="+Date.now(),{cache:"no-store"});const h=await r.json();for(const c in h.coins)st.hist[c]=h.coins[c];histDraw()}catch(e){}}
+function fwd(){const f=st.fwd,el=$("#fwd");if(!f||!f.scans){el.innerHTML='<h2>Forward test <span class="badge">PAPER</span></h2><div class="m">no scans yet</div>';return}
+ const c=f.counts,ls=f.last_scan,pc=x=>x==null?"–":Math.round(x*100)+"%",fr2=x=>x==null?"–":(x>=0?"+":"")+x.toFixed(2);
+ const cell=a=>a&&a.n?'<b>'+pc(a.wr)+'</b><span class="sub">n'+a.n+' · '+fr2(a.avgR)+'R</span>':'<span class="m">–</span><span class="sub">'+(a?a.open:0)+' open</span>';
+ let h='<h2>Forward test <span class="badge">PAPER · 1 wk</span> <span>last scan '+new Date(ls.scan_ts*1000).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+' · '+f.scans+' scans</span></h2>'+
+  '<div class="m">open '+c.open+' ('+c.pending+' pending entry) · closed '+c.closed+' · untriggered-expired '+c.untriggered+' · skips '+c.skip+' · rows '+c.rows+'</div>'+
+  '<div class="scroll"><table><tr><th>scenario</th><th>ALL</th><th>BTC</th><th>SOL</th><th>ETH</th><th>S</th><th>M</th><th>L</th></tr>';
+ for(const s of["MAGNET","FADE","CASCADE"]){const a=f.scenario[s]||{};h+='<tr><td>'+s+'</td>'+["ALL","BTC","SOL","ETH","S","M","L"].map(k=>'<td>'+cell(a[k])+'</td>').join("")+'</tr>'}
+ h+='</table></div>';const su=(f.setups||{})[st.coin]||[];
+ h+='<div class="m" style="margin-top:6px">'+st.coin+' setups from last scan (identical setups across threshold/filter variants merged; ×n = strategy rows)</div><div class="scroll"><table><tr><th>scn</th><th>band</th><th>dir</th><th>entry</th><th>TP</th><th>SL</th><th>R:R</th><th>ratio</th><th>status</th></tr>'+
+  (su.length?su.map(x=>'<tr><td>'+x.scenario.slice(0,3)+' ×'+x.n+'</td><td>'+x.band+'</td><td class="'+(x.dir=="LONG"?"g":"r")+'">'+x.dir+'</td><td>'+fp(x.entry)+'</td><td class="g">'+fp(x.tp)+'</td><td class="r">'+fp(x.sl)+'</td><td>'+(x.rr>=100?Math.round(x.rr):x.rr.toFixed(2))+'</td><td>'+fr(x.ratio)+'<span class="sub">'+x.nw+'w</span></td><td>'+x.status+(x.status=="open"&&x.scenario!="MAGNET"?(x.trig?" ✓trig":" ⏳"):"")+(x.r!=null?" "+fr2(x.r)+"R":"")+'</td></tr>').join(""):'<tr><td class="m" colspan=9>no live setups (all skipped)</td></tr>')+'</table></div>';
+ el.innerHTML=h}
+function swp(){const f=st.swp,el=$("#swp");if(!el)return;if(!f||!f.runs){el.innerHTML='<h2>Sweep paper test <span class="badge">PAPER</span></h2><div class="m">no runs yet (hourly at :02)</div>';return}
+ const B=f.books||{},R=B.real||{},pc=x=>x==null?"–":(x*100).toFixed(x<0.1?1:0)+"%",p2=x=>x==null?"–":(x*100).toFixed(2)+"%",f2=x=>x==null?"–":(x>=0?"+":"")+x.toFixed(2),cl=x=>x==null?"":(x>0?"g":x<0?"r":""),usd=x=>(x<0?"-$":"$")+Math.abs(Math.round(x)).toLocaleString(),
+ dt=t=>t?new Date(t*1000).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}):"–",lr=f.last_run||{},md=f.model||{};
+ const row=(n,b,d)=>'<tr><td>'+n+'<span class="sub">'+d+'</span></td><td>'+(b.n||0)+'<span class="sub">'+(b.open||0)+' open · '+(b.pending||0)+' pend · '+(b.missed||0)+' missed</span></td><td>'+(b.tp||0)+' / '+(b.sl||0)+' / '+(b.time||0)+'<span class="sub">TP / SL / time</span></td><td class="'+cl(b.netR)+'">'+f2(b.netR)+'R<span class="sub">avg '+f2(b.avgR)+'R</span></td><td class="'+cl(b.net)+'">'+usd(b.net||0)+'<span class="sub">HL fees '+usd(b.net_hl||0)+'</span></td></tr>';
+ const eq=R.equity_mtm||f.start_equity,lo=f.floor-250,hi=Math.max(f.start_equity+1250,eq+250),X=v=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
+ let h='<h2>Sweep paper test <span class="badge">PAPER · real HL map · EV gate</span> <span>last run '+dt(lr.ts)+' · '+f.runs+' runs</span></h2>'+
+  (f.halted?'<div class="r" style="margin-bottom:4px">⚠ floor breached — real entries halted</div>':'')+
+  '<div class="m">'+f.rule+'</div>'+
+  '<div class="m" style="margin-top:3px">edge model: <b>'+(md.status||"bootstrap")+'</b> — '+(md.edge_note||"")+(md.n?' · map-dir TP rate '+pc(md.map_tp_rate)+' vs random-walk '+pc(md.map_p_rand)+(md.n_shadow?' · shadow '+pc(md.shadow_tp_rate)+' vs '+pc(md.shadow_p_rand):''):'')+'</div>'+
+  '<div style="position:relative;height:14px;background:#0e1216;border:1px solid var(--ln);border-radius:4px;margin:6px 0 2px"><div style="position:absolute;left:0;top:0;bottom:0;width:'+X(eq)+'%;background:'+(eq>=f.start_equity?"#1d4d3a":"#4d1d24")+';border-radius:3px"></div>'+
+  '<div title="floor" style="position:absolute;top:-2px;bottom:-2px;left:'+X(f.floor)+'%;width:2px;background:var(--red)"></div><div title="start" style="position:absolute;top:-2px;bottom:-2px;left:'+X(f.start_equity)+'%;width:1px;background:#7b8794"></div></div>'+
+  '<div class="leg">TAKEN book equity (incl. open MTM) '+usd(eq)+' · start '+usd(f.start_equity)+' · <span class="r">floor '+usd(f.floor)+'</span></div>'+
+  '<div class="scroll"><table><tr><th>book</th><th>closed</th><th>exits</th><th>net R</th><th>net $</th></tr>'+
+  row("TAKEN (map)",R,"gate passed, paper book")+row("TAKEN shadow",B.shadow||{},"random direction")+
+  row("REJECTED would-have",B.would_rejected||{},"map direction")+row("passed-not-booked",B.would_passed||{},"busy/floor/backfill")+row("would-have shadow",B.would_shadow||{},"random direction")+'</table></div>';
+ const dc=f.decisions||{};h+='<div class="m" style="margin-top:6px">candidates '+(f.n_candidates||0)+': '+(Object.keys(dc).length?Object.entries(dc).map(([k,v])=>k+' '+v).join(" · "):"none yet")+(lr.note?' · <span class="a">'+lr.note+'</span>':'')+'</div>';
+ const cs=(f.candidates||[]).slice(0,20),oc=o=>!o?"–":(o.status=="closed"?o.exit+' <b class="'+cl(o.r)+'">'+f2(o.r)+'R</b>'+(o.coarse?" *":""):o.status);
+ h+='<div class="scroll"><table><tr><th>candidate</th><th>dir</th><th>SL</th><th>TP</th><th>RR</th><th>hold</th><th>p_rand</th><th>p_map</th><th>EV</th><th>decision</th><th>outcome</th><th>shadow</th></tr>'+(cs.length?cs.map(c=>'<tr><td>'+c.coin+' '+dt(c.sweep_ts)+'<span class="sub">D '+c.dom+' · pool $'+(c.big_usd/1e6).toFixed(1)+'M · '+c.n_wallets+'w'+(c.source=="backfill"?" · backfill":"")+'</span></td><td class="'+(c.dir=="LONG"?"g":"r")+'">'+c.dir+'</td><td>'+p2(c.sl_pct)+'</td><td>'+p2(c.tp_pct)+'</td><td>'+(c.rr==null?"–":c.rr.toFixed(2))+'<span class="sub">net '+(c.net_rr==null?"–":c.net_rr.toFixed(2))+'</span></td><td>'+(c.hold_h==null?"–":Math.round(c.hold_h)+'h')+'</td><td>'+pc(c.p_tp_rand)+'<span class="sub">SL '+pc(c.p_sl_rand)+' · t/o '+pc(c.p_timeout)+' · reach '+pc(c.p_reach)+'</span></td><td>'+pc(c.p_map)+'<span class="sub">edge '+(c.edge==null?"–":f2(c.edge))+'</span></td><td class="'+cl(c.ev)+'">'+(c.ev==null?"–":f2(c.ev)+'R')+'</td><td class="'+(c.decision=="TAKE"?"g":c.decision=="REJECT"?"m":"a")+'">'+c.decision+'<span class="sub">'+(c.reasons||"")+'</span></td><td>'+oc(c.out)+'</td><td>'+(c.shadow?c.shadow.dir.slice(0,1)+' '+oc(c.shadow):"–")+'</td></tr>').join(""):'<tr><td class="m" colspan=12>no candidates yet — waiting for a sweep setup</td></tr>')+'</table></div>'+
+  '<div class="leg">p_rand = P(TP before SL) for a driftless random walk at current 1h vol (closed form) · under pure RW p_rand ≈ SL/(SL+TP) so EV ≈ −fees for any ratio; only a map edge (p_map − p_rand, fitted after '+((f.gate||{}).calib_min||30)+' resolved) can make EV positive.</div>';
+ el.innerHTML=h}
+async function loadSwp(){try{const r=await fetch("data/sweep.json?t="+Date.now(),{cache:"no-store"});st.swp=await r.json();swp()}catch(e){}}
+async function loadFwd(){try{const r=await fetch("data/forward.json?t="+Date.now(),{cache:"no-store"});st.fwd=await r.json();fwd()}catch(e){}}
+let rz;addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(render,150)});
+load();loadHist();loadFwd();loadSwp();setInterval(()=>{load();loadHist();loadFwd();loadSwp()},60000);setInterval(()=>{if(st.snap)render()},15000);
+</script></body></html>
