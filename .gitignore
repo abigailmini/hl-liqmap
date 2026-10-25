@@ -1,0 +1,6 @@
+data/
+logs/
+screenshots/
+__pycache__/
+pages/
+*.sqlite*
