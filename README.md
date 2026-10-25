@@ -64,3 +64,9 @@ Reads the legacy continuous series (spikes/liq-map/liqmap.sqlite, logging since 
 - **NO-GO** otherwise → kill the signal box (keep the map as context only, or stop both jobs).
 Caveat: legacy `hl_liq` is the **raw (uncapped)** series. A capped-series backtest (from `data/hl-liqmap.sqlite` buckets
 long_cap/short_cap) is a deferred TODO — the dashboard signal uses capped values, so check both before trusting it.
+
+## GitHub Pages (phone access)
+- Live: https://abigailmini.github.io/hl-liqmap/  (branch `gh-pages`, static)
+- `collector.py` calls `publish.py` after each 5-min run: exports `data/snapshot.json` (latest, all coins) + `data/history.json` (rolling 24h, compact) into `./pages/` (gitignored checkout), amends the single gh-pages commit and force-pushes (timeout 60s, failures logged as `[warn] publish failed`, never fatal). gh-pages is always 1 commit → repo never grows.
+- Dashboard fetches `data/*.json?t=<ms>` (relative); local `server.py` serves the same paths. Stale banner if snapshot > 15 min old.
+- Expect ~1–3 min Pages propagation per update. Skip publishing: `collector.py --no-publish`.
